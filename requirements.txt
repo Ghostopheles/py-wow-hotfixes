@@ -1,2 +1,4 @@
 httpx
 construct
+python-dotenv
+psutil

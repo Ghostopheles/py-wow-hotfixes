@@ -2,8 +2,12 @@ import os
 import time
 import hashlib
 
+from dotenv import load_dotenv
+
 from client.automation import ClientAutomation
 from hotfixes.parser import HotfixParser, Flavor
+
+load_dotenv()
 
 FLAVOR = Flavor.Live
 
@@ -42,7 +46,7 @@ def run_loop():
 
 def run_once():
     client.launch()
-    parser.print_hotfixes()
+    # parser.print_hotfixes()
 
 
 if __name__ == "__main__":
