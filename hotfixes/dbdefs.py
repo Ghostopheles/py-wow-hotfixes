@@ -9,8 +9,10 @@ from typing import Optional
 from dataclasses import dataclass
 
 from hotfixes import CACHE_PATH
-from hotfixes.utils import Singleton, flatten_matches
+from hotfixes.structures import STRUCT_DB2_HEADER
+from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
 
+DB2_EXPORT_PATH = "T:/Data/dbcs/"
 
 DBD_PATH = os.path.join(CACHE_PATH, "WoWDBDefs-master")
 DBD_URL = "https://github.com/wowdev/WoWDBDefs/archive/refs/heads/master.zip"
@@ -53,6 +55,9 @@ class Build:
     minor: int
     patch: int
     build: int
+
+    def to_string(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}.{self.build}"
 
     @classmethod
     def from_version_str(cls, version: str):
@@ -125,7 +130,7 @@ class Definitions:
     def supports_version(self, version: Build) -> bool:
         for build in self.builds:
             if isinstance(build, Build):
-                if build == version:
+                if build.is_equal(version):
                     return True
             elif isinstance(build, BuildRange):
                 if version > build.lower and version < build.upper:
@@ -143,6 +148,14 @@ class DBD:
         entries = []
         for definition in self.definitions:
             if definition.supports_version(build):
+                entries.extend(definition.entries)
+
+        return entries
+
+    def get_definitions_for_layout(self, layout_hash: str) -> list[DefinitionEntry]:
+        entries = []
+        for definition in self.definitions:
+            if layout_hash in definition.layouts:
                 entries.extend(definition.entries)
 
         return entries
@@ -304,6 +317,24 @@ class DBDefs:
         defs = self.get_definitions_for_table_by_hash(tbl_hash)
         return self.parse_dbd(defs)
 
+    def get_layout_for_table(self, tbl_name: str, build: Build):
+        db2_path = os.path.join(
+            DB2_EXPORT_PATH,
+            build.to_string(),
+            "dbfilesclient",
+            f"{tbl_name.lower()}.db2",
+        )
+
+        if not os.path.exists(db2_path):
+            print(
+                f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}"
+            )
+
+        with open(db2_path, "rb") as f:
+            db2_header = STRUCT_DB2_HEADER.parse(f.read())
+
+        return convert_table_hash(db2_header.layout_hash)
+
 
 UNK_TBL = "Unknown"
 
@@ -316,6 +347,7 @@ class Manifest(Singleton):
     def load_manifest(self):
         manifest = None
         manifest_path = os.path.join(DBD_PATH, "manifest.json")
+
         with open(manifest_path, "r") as f:
             manifest = json.load(f)
 

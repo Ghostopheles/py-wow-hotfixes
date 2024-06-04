@@ -44,8 +44,8 @@ class HotfixParser:
     current_version: Build
 
     def __init__(self, game_path: str, flavor: Flavor):
-        self.manifest = Manifest()
         self.dbdefs = DBDefs()
+        self.manifest = Manifest()
 
         self.game_path = game_path
         self.flavor = flavor
@@ -81,6 +81,12 @@ PushID: {entry.push_id}
         if entry.status == RecordState.Valid.name:
             defs = self.dbdefs.get_parsed_definitions_by_hash(tbl_hash)
             def_entries = defs.get_definitions_for_build(self.current_version)
+
+            if len(def_entries) == 0:
+                tbl_layout_hash = self.dbdefs.get_layout_for_table(
+                    tbl_name, self.current_version
+                )
+                def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
 
             hotfix_data = list(entry.data)
             parsed_data = {}

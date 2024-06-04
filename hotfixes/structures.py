@@ -9,6 +9,7 @@ from construct import (
     Byte,
     GreedyRange,
     this,
+    PaddedString,
 )
 
 
@@ -43,4 +44,16 @@ STRUCT_DBCACHE_ENTRY = Struct(
 
 STRUCT_DBCACHE_FILE = Struct(
     "header" / STRUCT_DBCACHE_HEADER, "entries" / GreedyRange(STRUCT_DBCACHE_ENTRY)
+)
+
+STRUCT_DB2_HEADER = Struct(
+    "magic" / Int32ul,
+    "version" / Int32ul,
+    "schemaString" / PaddedString(128, "ascii"),
+    "record_count" / Int32ul,
+    "field_count" / Int32ul,
+    "record_size" / Int32ul,
+    "string_table_size" / Int32ul,
+    "table_hash" / Int32ul,
+    "layout_hash" / Int32ul,
 )
