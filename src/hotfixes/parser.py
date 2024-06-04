@@ -1,11 +1,12 @@
 import os
 
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 
-from typing import Optional
+from typing import Optional, Any
 
 from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
-from hotfixes.structures import STRUCT_DBCACHE_FILE, RecordState
+from hotfixes.structures import RecordState, Region
+from hotfixes.t_structs import DBCacheFile, DBCacheEntry
 from hotfixes.utils import (
     convert_table_hash,
     bytes_to_int,
@@ -13,18 +14,6 @@ from hotfixes.utils import (
     bytes_to_str,
     bytes_to_float,
 )
-
-DATA_INT_SIZE = 8
-
-
-class Region(IntEnum):
-    US = 1
-    KR = 2
-    EU = 3
-    TW = 4
-    CN = 5
-    TR1 = 50
-    TR2 = 60
 
 
 class Flavor(StrEnum):
@@ -45,7 +34,7 @@ BRANCH_NAMES = {
 class HotfixParser:
     current_version: Build
 
-    def __init__(self, game_path: str, flavor: Flavor):
+    def __init__(self, game_path: str, flavor: Flavor, dbcache_schema: Any):
         self.dbdefs = DBDefs()
         self.manifest = Manifest()
 
@@ -55,15 +44,17 @@ class HotfixParser:
         self.dbcache_path = os.path.join(game_path, flavor, "Cache", "ADB", "enUS", "DBCache.bin")
         self.buildinfo_path = os.path.join(game_path, ".build.info")
 
+        self.struct_dbcache_file = dbcache_schema.STRUCT_DBCACHE_FILE
+
         self.cache_game_versions()
 
-    def read_dbcache(self):
+    def read_dbcache(self) -> DBCacheFile:
         with open(self.dbcache_path, "rb") as f:
-            dbcache = STRUCT_DBCACHE_FILE.parse(f.read())
+            dbcache = self.struct_dbcache_file.parse(f.read())
 
-        return dbcache
+        return dbcache  # type: ignore
 
-    def format_hotfix_data(self, entry, filter: Optional[str]) -> Optional[str]:
+    def format_hotfix_data(self, entry: DBCacheEntry, filter: Optional[str]) -> Optional[str]:
         tbl_hash = convert_table_hash(entry.table_hash)
         tbl_name = self.manifest.get_table_name_from_hash(tbl_hash)
 
@@ -84,6 +75,9 @@ PushID: {entry.push_id}
 
             if len(def_entries) == 0:
                 tbl_layout_hash = self.dbdefs.get_layout_for_table(tbl_name, self.current_version)
+                if not tbl_layout_hash:
+                    return
+
                 def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
 
             hotfix_data = list(entry.data)
@@ -96,6 +90,9 @@ PushID: {entry.push_id}
                 chunk_width = int(def_entry.int_width / 8)  # each number in the hotfix data is 8 bytes
 
                 column = defs.get_column_from_def_entry(def_entry)
+                if column is None:
+                    continue
+
                 chunk_type = column.type
 
                 chunk_data = hotfix_data[:chunk_width]
@@ -120,7 +117,7 @@ PushID: {entry.push_id}
 
         return formatted
 
-    def print_hotfixes(self, filter: Optional[str]):
+    def print_hotfixes(self, filter: Optional[str] = None):
         dbcache = self.read_dbcache()
 
         header_magic = dec_to_ascii(dbcache.header.magic)

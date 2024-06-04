@@ -9,7 +9,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from hotfixes import CACHE_PATH
-from hotfixes.structures import STRUCT_DB2_HEADER
+from hotfixes.structures import DBStructures
 from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
 
 DB2_EXPORT_PATH = "T:/Data/dbcs/"
@@ -147,7 +147,7 @@ class DBD:
 
         return entries
 
-    def get_column_from_def_entry(self, def_entry: DefinitionEntry):
+    def get_column_from_def_entry(self, def_entry: DefinitionEntry) -> Optional[Column]:
         for column in self.columns:
             if column.name == def_entry.column:
                 return column
@@ -303,7 +303,7 @@ class DBDefs:
         defs = self.get_definitions_for_table_by_hash(tbl_hash)
         return self.parse_dbd(defs)
 
-    def get_layout_for_table(self, tbl_name: str, build: Build):
+    def get_layout_for_table(self, tbl_name: str, build: Build) -> Optional[str]:
         db2_path = os.path.join(
             DB2_EXPORT_PATH,
             build.to_string(),
@@ -313,11 +313,12 @@ class DBDefs:
 
         if not os.path.exists(db2_path):
             print(f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}")
+            return
 
         with open(db2_path, "rb") as f:
-            db2_header = STRUCT_DB2_HEADER.parse(f.read())
+            db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(f.read())
 
-        return convert_table_hash(db2_header.layout_hash)
+        return convert_table_hash(db2_header.layout_hash)  # type: ignore
 
 
 UNK_TBL = "Unknown"
