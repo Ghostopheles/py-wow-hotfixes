@@ -7,13 +7,14 @@ on:
   push:
     branches: [ "master" ]
     paths:
-      - 'src/'
-      - 'tests/'
+      - 'src/**'
+      - 'tests/**'
   pull_request:
     branches: [ "master" ]
     paths:
-      - 'src/'
-      - 'tests/'
+      - 'src/**'
+      - 'tests/**'
+  workflow_dispatch:
 
 jobs:
   build:
