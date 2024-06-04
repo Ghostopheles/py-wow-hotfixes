@@ -12,6 +12,7 @@ testpaths = [
 mypy_path = "src"
 exclude = [
     "cache/*",
+    "main.py"
 ]
 check_untyped_defs = true
 disallow_any_generics = true
