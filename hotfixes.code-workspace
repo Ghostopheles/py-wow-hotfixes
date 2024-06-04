@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"black-formatter.args": [
+			"--line-length=160"
+		],
+		"python.analysis.typeCheckingMode": "basic",
+		"python.analysis.autoFormatStrings": true,
+		"python.analysis.completeFunctionParens": true,
+		"python.analysis.ignore": [
+			"structures.py"
+		]
+	}
+}
