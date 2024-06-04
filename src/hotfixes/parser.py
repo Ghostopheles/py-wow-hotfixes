@@ -2,6 +2,8 @@ import os
 
 from enum import IntEnum, StrEnum
 
+from typing import Optional
+
 from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
 from hotfixes.structures import STRUCT_DBCACHE_FILE, RecordState
 from hotfixes.utils import (
@@ -50,9 +52,7 @@ class HotfixParser:
         self.game_path = game_path
         self.flavor = flavor
 
-        self.dbcache_path = os.path.join(
-            game_path, flavor, "Cache", "ADB", "enUS", "DBCache.bin"
-        )
+        self.dbcache_path = os.path.join(game_path, flavor, "Cache", "ADB", "enUS", "DBCache.bin")
         self.buildinfo_path = os.path.join(game_path, ".build.info")
 
         self.cache_game_versions()
@@ -63,12 +63,12 @@ class HotfixParser:
 
         return dbcache
 
-    def format_hotfix_data(self, entry, filter: str = None):
+    def format_hotfix_data(self, entry, filter: Optional[str]) -> Optional[str]:
         tbl_hash = convert_table_hash(entry.table_hash)
         tbl_name = self.manifest.get_table_name_from_hash(tbl_hash)
 
         if filter and tbl_name.lower() != filter.lower():
-            return
+            return None
 
         formatted = f"""
 PushID: {entry.push_id}
@@ -83,9 +83,7 @@ PushID: {entry.push_id}
             def_entries = defs.get_definitions_for_build(self.current_version)
 
             if len(def_entries) == 0:
-                tbl_layout_hash = self.dbdefs.get_layout_for_table(
-                    tbl_name, self.current_version
-                )
+                tbl_layout_hash = self.dbdefs.get_layout_for_table(tbl_name, self.current_version)
                 def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
 
             hotfix_data = list(entry.data)
@@ -95,9 +93,7 @@ PushID: {entry.push_id}
                     continue
 
                 chunk_name = def_entry.column
-                chunk_width = int(
-                    def_entry.int_width / 8
-                )  # each number in the hotfix data is 8 bytes
+                chunk_width = int(def_entry.int_width / 8)  # each number in the hotfix data is 8 bytes
 
                 column = defs.get_column_from_def_entry(def_entry)
                 chunk_type = column.type
@@ -124,13 +120,11 @@ PushID: {entry.push_id}
 
         return formatted
 
-    def print_hotfixes(self, filter: str = None):
+    def print_hotfixes(self, filter: Optional[str]):
         dbcache = self.read_dbcache()
 
         header_magic = dec_to_ascii(dbcache.header.magic)
-        print(
-            f"DBCache Version: {dbcache.header.version} | Build: {dbcache.header.build_id}"
-        )
+        print(f"DBCache Version: {dbcache.header.version} | Build: {dbcache.header.build_id}")
         print(f"Header Magic: {header_magic}")
         for entry in dbcache.entries:
             if entry.push_id != -1:  # ignore those pesky cached entries
@@ -143,7 +137,7 @@ PushID: {entry.push_id}
             data = f.read()
 
         data_split = data.split("\n")
-        index = []
+        index: list[str] = []
         output = []
 
         for line in data_split:
@@ -168,9 +162,7 @@ PushID: {entry.push_id}
 
         buildinfo = self.read_build_info()
         for entry in buildinfo:
-            self.__game_versions[entry["Product"]] = Build.from_version_str(
-                entry["Version"]
-            )
+            self.__game_versions[entry["Product"]] = Build.from_version_str(entry["Version"])
 
         current_branch = BRANCH_NAMES[self.flavor]
         self.current_version = self.__game_versions[current_branch]

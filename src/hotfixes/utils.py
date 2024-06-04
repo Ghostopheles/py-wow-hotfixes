@@ -1,3 +1,5 @@
+from typing import Any
+
 TABLE_HASH_LEN = 8
 
 
@@ -11,14 +13,14 @@ class Singleton:
         return cls.__instance
 
 
-def flatten_matches(matches, preserve_empty: bool = True) -> list:
+def flatten_matches(matches: tuple[list[Any]] | list[Any], preserve_empty: bool = True) -> list[str]:
     if preserve_empty:
         return [thing for match in matches for thing in match]
     else:
         return [thing for match in matches for thing in match if thing]
 
 
-def dec_to_ascii(number):
+def dec_to_ascii(number: int) -> str:
     number_hex = hex(number)[2:]
     if len(number_hex) % 2 != 0:
         number_hex = "0" + number_hex
@@ -28,7 +30,7 @@ def dec_to_ascii(number):
     return out_string
 
 
-def convert_table_hash(tbl_hash: int):
+def convert_table_hash(tbl_hash: int) -> str:
     converted = hex(tbl_hash)[2:].upper()
     converted_len = len(converted)
     if converted_len != TABLE_HASH_LEN:
@@ -51,9 +53,7 @@ def bytes_to_hex(data: list[int]) -> str:
 def bytes_to_int(data: list[int], is_unsigned: bool = True):
     hex_bytes = bytes_to_hex(data)
 
-    return int.from_bytes(
-        bytes.fromhex(hex_bytes), byteorder="little", signed=not is_unsigned
-    )
+    return int.from_bytes(bytes.fromhex(hex_bytes), byteorder="little", signed=not is_unsigned)
 
 
 def bytes_to_float(data: list[int]):
@@ -66,3 +66,7 @@ def bytes_to_str(data: list[int]):
     hex_bytes = bytes_to_hex(data)
 
     return bytes.fromhex(hex_bytes).decode(encoding="ascii")
+
+
+def str_to_bytes(input: str) -> list[int]:
+    return list(input.encode("ascii"))

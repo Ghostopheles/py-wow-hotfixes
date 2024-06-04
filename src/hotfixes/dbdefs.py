@@ -20,7 +20,9 @@ DBD_URL = "https://github.com/wowdev/WoWDBDefs/archive/refs/heads/master.zip"
 # shoutout to my main man ChatGPT-4o for writing these regex patterns (except the column one)
 
 LAYOUT_HEADER_PATTERN = r"^LAYOUT\s+(.+)(?:,\s*(.+))*"
-LAYOUT_BUILD_PATTERN = r"BUILD\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?)(?:,\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?))*"
+LAYOUT_BUILD_PATTERN = (
+    r"BUILD\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?)(?:,\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?))*"
+)
 
 LAYOUT_COLUMN_PATTERN = r"(?>\$(.+)\$)?(.+)<(.+)>(?>\[(.+)\])?"
 LAYOUT_COLUMN_RE = re.compile(LAYOUT_COLUMN_PATTERN)
@@ -46,7 +48,7 @@ class Column:
     name: str
     confirmed_name: bool
     foreign: Optional[Foreign]
-    comment: str
+    comment: Optional[str]
 
 
 @dataclass
@@ -69,28 +71,13 @@ class Build:
     def is_equal(self, other):
         if other is None:
             return False
-        return (
-            self.major == other.major
-            and self.minor == other.minor
-            and self.patch == other.patch
-            and self.build == other.build
-        )
+        return self.major == other.major and self.minor == other.minor and self.patch == other.patch and self.build == other.build
 
     def __lt__(self, other):
-        return (
-            self.major < other.major
-            or self.minor < other.minor
-            or self.patch < other.patch
-            or self.build < other.build
-        )
+        return self.major < other.major or self.minor < other.minor or self.patch < other.patch or self.build < other.build
 
     def __gt__(self, other):
-        return (
-            self.major > other.major
-            or self.minor > other.minor
-            or self.patch > other.patch
-            or self.build > other.build
-        )
+        return self.major > other.major or self.minor > other.minor or self.patch > other.patch or self.build > other.build
 
 
 @dataclass
@@ -288,8 +275,7 @@ class DBDefs:
 
         return Definitions(builds, layout_hashes, ["uwu"], columns)
 
-    def parse_dbd(self, dbd: str):
-        columns = None
+    def parse_dbd(self, dbd: str) -> DBD:
         definitions = []
 
         dbd_split = dbd.split("\n\n")
@@ -326,9 +312,7 @@ class DBDefs:
         )
 
         if not os.path.exists(db2_path):
-            print(
-                f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}"
-            )
+            print(f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}")
 
         with open(db2_path, "rb") as f:
             db2_header = STRUCT_DB2_HEADER.parse(f.read())
@@ -340,6 +324,8 @@ UNK_TBL = "Unknown"
 
 
 class Manifest(Singleton):
+    __name_lookup: dict[str, str]
+
     def __init__(self):
         self.__name_lookup = {}
         self.load_manifest()
@@ -352,7 +338,7 @@ class Manifest(Singleton):
             manifest = json.load(f)
 
         if manifest is None:
-            raise Exception("bruh")  # do some kind of proper error handling here
+            raise Exception("bruh")  # TODO: some kind of proper error handling here
 
         for tbl in manifest:
             self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]

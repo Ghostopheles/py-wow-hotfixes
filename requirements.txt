@@ -1,4 +1,3 @@
-httpx
-construct
-python-dotenv
-psutil
+httpx==0.27.0
+construct==2.10.70
+psutil==5.9.7
