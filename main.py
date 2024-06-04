@@ -44,11 +44,13 @@ def run_loop():
         time.sleep(loop_time)
 
 
-def run_once(no_client: bool = False):
-    if not no_client:
+def run_once(launch_client: bool = False):
+    if launch_client:
         client.launch()
     parser.print_hotfixes()
 
 
 if __name__ == "__main__":
-    run_once(no_client=True)
+    launch_client = False
+
+    run_once(launch_client=launch_client)
