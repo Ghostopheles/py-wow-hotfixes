@@ -41,10 +41,13 @@ class ByteList(Iterable[int]):
             raise StopIteration
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ByteList):
+        if not isinstance(other, ByteList) and not isinstance(other, Iterable):
             return NotImplemented
 
         return self.__data == other
+
+    def __repr__(self) -> str:
+        return str(self.__data)
 
     # in methods
 
