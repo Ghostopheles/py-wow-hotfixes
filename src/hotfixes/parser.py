@@ -76,7 +76,7 @@ PushID: {entry.push_id}
             if len(def_entries) == 0:
                 tbl_layout_hash = self.dbdefs.get_layout_for_table(tbl_name, self.current_version)
                 if not tbl_layout_hash:
-                    return
+                    return None
 
                 def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
 

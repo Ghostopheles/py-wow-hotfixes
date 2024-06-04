@@ -1,3 +1,5 @@
+from typing import Union
+
 from hotfixes.structures import Region, RecordState
 from hotfixes.bytelist import ByteList
 
@@ -17,7 +19,7 @@ class DBCacheEntry:
     table_hash: int
     record_id: int
     data_size: int
-    status: RecordState
+    status: Union[RecordState, str]
     padding: list[int]
     data: ByteList
 

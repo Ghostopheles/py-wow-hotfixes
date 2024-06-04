@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args, TypeAlias
 
 from collections.abc import Iterable
 
@@ -6,19 +6,27 @@ HOTFIXES_DEFAULT_STR_ENCODING = "ascii"
 HOTFIXES_DEFAULT_ENDIANNESS = "little"
 
 
-class ByteList(Iterable):
+ByteOrder: TypeAlias = Literal["little", "big"]
+
+
+class ByteList(Iterable[int]):
     """A list of little-endian `uint8` values."""
 
     __data: list[int]
     __encoding: str
-    __byteorder: Literal["little", "big"]
+    __byteorder: ByteOrder
 
     def __init__(self, *args, **kwargs) -> None:
         self.__index = 0
 
         self.__data = kwargs["data"] if "data" in kwargs else [*args]
         self.__encoding = kwargs["encoding"] if "encoding" in kwargs else HOTFIXES_DEFAULT_STR_ENCODING
-        self.__byteorder = kwargs["byteorder"] if "byteorder" in kwargs else HOTFIXES_DEFAULT_ENDIANNESS
+        byteorder = kwargs["byteorder"] if "byteorder" in kwargs else HOTFIXES_DEFAULT_ENDIANNESS
+
+        if byteorder not in get_args(ByteOrder):
+            byteorder = HOTFIXES_DEFAULT_ENDIANNESS
+
+        self.__byteorder = byteorder
 
     def __iter__(self):
         self.__index = 0
@@ -32,7 +40,10 @@ class ByteList(Iterable):
         else:
             raise StopIteration
 
-    def __eq__(self, other: Iterable) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ByteList):
+            return NotImplemented
+
         return self.__data == other
 
     # in methods

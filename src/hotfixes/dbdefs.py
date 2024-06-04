@@ -152,6 +152,8 @@ class DBD:
             if column.name == def_entry.column:
                 return column
 
+        return None
+
 
 class DBDefs:
     def __init__(self):
@@ -313,7 +315,7 @@ class DBDefs:
 
         if not os.path.exists(db2_path):
             print(f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}")
-            return
+            return None
 
         with open(db2_path, "rb") as f:
             db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(f.read())
