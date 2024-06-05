@@ -17,7 +17,7 @@ def flatten_matches(matches: tuple[list[Any]] | list[Any], preserve_empty: bool 
     if preserve_empty:
         return [thing for match in matches for thing in match]
     else:
-        return [thing for match in matches for thing in match if thing]
+        return [thing for match in matches for thing in match if thing and thing[0].isdigit()]
 
 
 def dec_to_ascii(number: int) -> str:
