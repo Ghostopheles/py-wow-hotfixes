@@ -17,8 +17,6 @@ DB2_EXPORT_PATH = "T:/Data/dbcs/"
 DBD_PATH = os.path.join(CACHE_PATH, "WoWDBDefs-master")
 DBD_URL = "https://github.com/wowdev/WoWDBDefs/archive/refs/heads/master.zip"
 
-# shoutout to my main man ChatGPT-4o for writing these regex patterns (except the column one)
-
 LAYOUT_HEADER_PATTERN = r"^LAYOUT\s+(.+)(?:,\s*(.+))*"
 LAYOUT_BUILD_PATTERN = r"BUILD\s+(\d+(\.\d+)+\-\d+(\.\d+)+)*"  # ty Cloudy
 
