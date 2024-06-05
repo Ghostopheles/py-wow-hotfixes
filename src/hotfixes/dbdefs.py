@@ -20,9 +20,7 @@ DBD_URL = "https://github.com/wowdev/WoWDBDefs/archive/refs/heads/master.zip"
 # shoutout to my main man ChatGPT-4o for writing these regex patterns (except the column one)
 
 LAYOUT_HEADER_PATTERN = r"^LAYOUT\s+(.+)(?:,\s*(.+))*"
-LAYOUT_BUILD_PATTERN = (
-    r"BUILD\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?)(?:,\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?))*"
-)
+LAYOUT_BUILD_PATTERN = r"BUILD\s+(\d+(\.\d+)+\-\d+(\.\d+)+)*"  # ty Cloudy
 
 LAYOUT_COLUMN_PATTERN = r"(?>\$(.+)\$)?(.+)<(.+)>(?>\[(.+)\])?"
 LAYOUT_COLUMN_RE = re.compile(LAYOUT_COLUMN_PATTERN)
