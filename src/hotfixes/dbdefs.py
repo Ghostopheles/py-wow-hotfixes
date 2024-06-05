@@ -29,6 +29,7 @@ class ColumnDataType(StrEnum):
     String = "string"
     Float = "float"
     Locstring = "locstring"
+    U16 = "u16"
     U8 = "u8"
 
 
@@ -267,11 +268,11 @@ class DBDefs:
                 is_unsigned,
                 int(array_size),
                 annotations,
-                "uwu",
+                "uwu",  # TODO: properly parse comments here like what the heck is this
             )
             columns.append(entry)
 
-        return Definitions(builds, layout_hashes, ["uwu"], columns)
+        return Definitions(builds, layout_hashes, ["uwu"], columns)  # TODO: here too
 
     def parse_dbd(self, dbd: str) -> DBD:
         definitions = []
@@ -348,4 +349,4 @@ class Manifest(Singleton):
         if tbl_hash in self.__name_lookup:
             return self.__name_lookup[tbl_hash]
         else:
-            return UNK_TBL  # probably also send an alert somewhere idk
+            return UNK_TBL  # TODO: probably also send an alert somewhere idk
