@@ -97,7 +97,7 @@ PushID: {entry.push_id}
 
                 chunk_data = hotfix_data[:chunk_width]
                 match chunk_type:
-                    case ColumnDataType.Integer:
+                    case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
                         chunk = bytes_to_int(chunk_data, def_entry.is_unsigned)
                     case ColumnDataType.Float:
                         chunk = bytes_to_float(chunk_data)
