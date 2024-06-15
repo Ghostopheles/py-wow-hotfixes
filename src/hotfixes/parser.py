@@ -1,12 +1,13 @@
 import os
 
 from enum import StrEnum
-
+from dataclasses import dataclass
 from typing import Optional, Any
 
 from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
 from hotfixes.structures import RecordState, Region
 from hotfixes.t_structs import DBCacheFile, DBCacheEntry
+from hotfixes.bytelist import ByteList
 from hotfixes.utils import (
     convert_table_hash,
     bytes_to_int,
@@ -29,6 +30,25 @@ BRANCH_NAMES = {
     Flavor.PTR: "wowt",
     Flavor.XPTR: "wowxptr",
 }
+
+
+@dataclass
+class Hotfix:
+    PushID: int
+    UniqueID: int
+    TableHash: str
+    TableName: str
+    Status: RecordState
+    RecordID: int
+    Data: Optional[dict[str, Any]]
+
+
+@dataclass
+class HotfixCollection:
+    DBCacheVersion: int
+    HeaderMagic: str
+    Hotfixes: list[Hotfix]
+    BuildId: int
 
 
 class HotfixParser:
@@ -94,7 +114,6 @@ PushID: {entry.push_id}
                     continue
 
                 chunk_type = column.type
-
                 chunk_data = hotfix_data[:chunk_width]
                 match chunk_type:
                     case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
@@ -128,6 +147,80 @@ PushID: {entry.push_id}
                 formatted_hotfix = self.format_hotfix_data(entry, filter)
                 if formatted_hotfix is not None:
                     print(formatted_hotfix)
+
+    def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
+        defs = self.dbdefs.get_parsed_definitions_by_hash(table_hash)
+        def_entries = defs.get_definitions_for_build(self.current_version)
+
+        if len(def_entries) == 0:
+            tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name, self.current_version)
+            if not tbl_layout_hash:
+                return None
+
+            def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
+
+        data = list(hotfix_data)
+        parsed_data = {}
+        for def_entry in def_entries:
+            if "noninline,id" in def_entry.annotation:
+                continue
+
+            chunk_name = def_entry.column
+            chunk_width = int(def_entry.int_width / 8)  # each number in the hotfix data is 8 bytes
+
+            column = defs.get_column_from_def_entry(def_entry)
+            if column is None:
+                continue
+
+            chunk_type = column.type
+            chunk_data = data[:chunk_width]
+            match chunk_type:
+                case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
+                    chunk = bytes_to_int(chunk_data, def_entry.is_unsigned)
+                case ColumnDataType.Float:
+                    chunk = bytes_to_float(chunk_data)
+                case ColumnDataType.String | ColumnDataType.Locstring:
+                    chunk = bytes_to_str(chunk_data)
+                case _:
+                    raise Exception("no data type?")
+
+            parsed_data[chunk_name] = chunk
+
+            data = data[chunk_width:]
+
+        return parsed_data
+
+    def get_hotfixes(self, filter: Optional[str] = None, show_cached_entries: Optional[bool] = False) -> HotfixCollection:
+        dbcache = self.read_dbcache()
+        header_magic = dec_to_ascii(dbcache.header.magic)
+        dbcache_version = dbcache.header.version
+        build_id = dbcache.header.build_id
+
+        all_hotfixes = []
+        for entry in dbcache.entries:
+            if entry.push_id == -1 and not show_cached_entries:
+                continue
+
+            tbl_hash = convert_table_hash(entry.table_hash)
+            tbl_name = self.manifest.get_table_name_from_hash(tbl_hash)
+
+            if filter and tbl_name != filter:
+                continue
+
+            hotfix_data = self.parse_hotfix_data(tbl_hash, tbl_name, entry.data)
+
+            hotfix = Hotfix(
+                entry.push_id,
+                entry.unique_id,
+                tbl_hash,
+                tbl_name,
+                RecordState[entry.status],  # type: ignore
+                entry.record_id,
+                hotfix_data,
+            )
+            all_hotfixes.append(hotfix)
+
+        return HotfixCollection(dbcache_version, header_magic, all_hotfixes, build_id)
 
     def read_build_info(self):
         with open(self.buildinfo_path, "r") as f:

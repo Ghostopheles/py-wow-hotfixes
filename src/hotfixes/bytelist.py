@@ -1,4 +1,4 @@
-from typing import Literal, Optional, get_args, TypeAlias
+from typing import Literal, Optional, get_args, TypeAlias, Union
 
 from collections.abc import Iterable
 
@@ -48,6 +48,18 @@ class ByteList(Iterable[int]):
 
     def __repr__(self) -> str:
         return str(self.__data)
+
+    def __getitem__(self, index: Union[int, slice]):
+        if isinstance(index, slice):
+            start, stop, step = index.indices(len(self.__data))
+            return [self.__data[i] for i in range(start, stop, step)]
+        elif isinstance(index, int):
+            return self.__data[index]
+        else:
+            return NotImplemented
+
+    def __len__(self):
+        return len(self.__data)
 
     # in methods
 

@@ -9,8 +9,8 @@
 			"--line-length=160"
 		],
 		"python.analysis.typeCheckingMode": "basic",
-		"python.analysis.autoFormatStrings": true,
-		"python.analysis.completeFunctionParens": true,
+		"python.analysis.autoFormatStrings": false,
+		"python.analysis.completeFunctionParens": false,
 		"python.analysis.ignore": [
 			"structures.py"
 		]
