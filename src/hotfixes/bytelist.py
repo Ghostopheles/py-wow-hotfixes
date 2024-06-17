@@ -55,8 +55,6 @@ class ByteList(Iterable[int]):
             return [self.__data[i] for i in range(start, stop, step)]
         elif isinstance(index, int):
             return self.__data[index]
-        else:
-            return NotImplemented
 
     def __len__(self):
         return len(self.__data)
