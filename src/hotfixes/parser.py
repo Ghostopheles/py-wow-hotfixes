@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from typing import Optional, Any
 
 from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
-from hotfixes.structures import RecordState, Region
+from hotfixes.structures import RecordState
 from hotfixes.t_structs import DBCacheFile, DBCacheEntry
 from hotfixes.bytelist import ByteList
-from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float, bytes_to_hex
+from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float
 
 
 class Flavor(StrEnum):
@@ -70,6 +70,17 @@ class HotfixParser:
 
         return dbcache  # type: ignore
 
+    def convert_chunk(self, data: list[int], type: ColumnDataType, is_unsigned: bool):
+        match type:
+            case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
+                return bytes_to_int(data, is_unsigned)
+            case ColumnDataType.Float:
+                return bytes_to_float(data)
+            case ColumnDataType.String | ColumnDataType.Locstring:
+                return bytes_to_str(data)
+            case _:
+                raise Exception("no data type?")
+
     def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
         if len(hotfix_data) == 0:
             return None
@@ -103,25 +114,14 @@ class HotfixParser:
                 except ValueError:
                     pass
 
-            def convert_chunk(chunk_data):
-                match chunk_type:
-                    case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
-                        return bytes_to_int(chunk_data, def_entry.is_unsigned)
-                    case ColumnDataType.Float:
-                        return bytes_to_float(chunk_data)
-                    case ColumnDataType.String | ColumnDataType.Locstring:
-                        return bytes_to_str(chunk_data)
-                    case _:
-                        raise Exception("no data type?")
-
             if def_entry.array_size == 0:
-                chunk = convert_chunk(data[:chunk_width])
+                chunk = self.convert_chunk(data[:chunk_width], chunk_type, def_entry.is_unsigned)
                 data = data[chunk_width:]
             else:
                 chunk = []
                 for _ in range(def_entry.array_size):
                     chunk_data = data[:chunk_width]
-                    chunk.append(convert_chunk(chunk_data))
+                    chunk.append(self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned))
                     data = data[chunk_width:]
 
             parsed_data[chunk_name] = chunk
