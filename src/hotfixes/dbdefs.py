@@ -206,9 +206,9 @@ class DBDefs:
 
         return parsed_column
 
-    def parse_columns(self, *args):
+    def parse_columns(self, lines):
         columns = []
-        for line in args:
+        for line in lines:
             column = self.parse_column_line(line)
             columns.append(column)
 
@@ -268,7 +268,7 @@ class DBDefs:
         for section in dbd_split:
             section_split = section.split("\n")
             if section_split[0] == "COLUMNS":
-                columns = self.parse_columns(*section_split[1:])
+                columns = self.parse_columns(section_split[1:])
             elif section_split[0].startswith("LAYOUT"):
                 definitions.append(self.parse_layout(section_split))
 
@@ -276,10 +276,8 @@ class DBDefs:
 
     def get_definitions_for_table(self, tbl_name: str) -> str:
         if tbl_name in DBD_CACHE:
-            print(f"Serving cached defs for {tbl_name}")
             return DBD_CACHE[tbl_name]
 
-        print(f"Requesting defs for {tbl_name}")
         url = f"/definitions/{tbl_name}.dbd"
         response = self.__client.get(url)
         response.raise_for_status()
