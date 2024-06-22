@@ -323,6 +323,9 @@ class DBDefs:
 UNK_TBL = "Unknown"
 
 
+class MissingManifestException(Exception): ...
+
+
 class Manifest(Singleton):
     __name_lookup: dict[str, str]
 
@@ -338,7 +341,7 @@ class Manifest(Singleton):
             manifest = json.load(f)
 
         if manifest is None:
-            raise Exception("bruh")  # TODO: some kind of proper error handling here
+            raise MissingManifestException("Manifest could not be found at dbdefs path")
 
         for tbl in manifest:
             self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]
