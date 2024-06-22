@@ -1,5 +1,6 @@
 import os
 import httpx
+import concurrent.futures
 
 from enum import StrEnum
 from dataclasses import dataclass
@@ -198,15 +199,16 @@ PushID: {entry.push_id}
         build_id = dbcache.header.build_id
 
         all_hotfixes = []
-        for entry in dbcache.entries:
+
+        def handle_hotfix(entry: DBCacheEntry):
             if entry.push_id == -1 and not show_cached_entries:
-                continue
+                return
 
             tbl_hash = convert_table_hash(entry.table_hash)
             tbl_name = self.manifest.get_table_name_from_hash(tbl_hash)
 
             if filter and tbl_name != filter:
-                continue
+                return
 
             hotfix_data = self.parse_hotfix_data(tbl_hash, tbl_name, entry.data)
 
@@ -220,6 +222,11 @@ PushID: {entry.push_id}
                 hotfix_data,
             )
             all_hotfixes.append(hotfix)
+
+        max_threads = 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            futures = [executor.submit(handle_hotfix, entry) for entry in dbcache.entries]
+            concurrent.futures.wait(futures)
 
         return HotfixCollection(dbcache_version, header_magic, all_hotfixes, build_id)
 
