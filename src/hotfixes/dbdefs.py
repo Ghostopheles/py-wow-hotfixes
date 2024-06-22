@@ -18,7 +18,7 @@ DBD_CACHE = {}
 LAYOUT_HEADER_PATTERN = r"^LAYOUT\s+(.+)(?:,\s*(.+))*"
 LAYOUT_BUILD_PATTERN = r"BUILD\s+(\d+(\.\d+)+\-\d+(\.\d+)+)*"  # ty Cloudy
 
-LAYOUT_COLUMN_PATTERN = r"(?>\$(.+)\$)?(.+)<(.+)>(?>\[(.+)\])?"
+LAYOUT_COLUMN_PATTERN = r"(?>\$(.+)\$)?([^<]+)(<.+>)?+(?>\[(.+)\])?"
 LAYOUT_COLUMN_RE = re.compile(LAYOUT_COLUMN_PATTERN)
 
 
@@ -233,15 +233,19 @@ class DBDefs:
 
         # read columns now
         columns = []
-        for line in section[i:]:
+        column_defs = section[i:]
+        for line in column_defs:
             column_matches = re.findall(LAYOUT_COLUMN_PATTERN, line)
             if not column_matches:
-                break
+                continue
 
             columns_flattened = flatten_matches(column_matches)
             annotations = columns_flattened[0]
             column_name = columns_flattened[1]
-            int_width = columns_flattened[2]
+            int_width = columns_flattened[2].replace("<", "").replace(">", "")
+            if int_width == "":
+                int_width = "8"
+
             is_unsigned = False
             if int_width.startswith("u"):
                 int_width = int_width.replace("u", "")

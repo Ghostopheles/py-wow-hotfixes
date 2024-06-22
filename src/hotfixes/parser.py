@@ -10,13 +10,7 @@ from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
 from hotfixes.structures import RecordState, Region
 from hotfixes.t_structs import DBCacheFile, DBCacheEntry
 from hotfixes.bytelist import ByteList
-from hotfixes.utils import (
-    convert_table_hash,
-    bytes_to_int,
-    dec_to_ascii,
-    bytes_to_str,
-    bytes_to_float,
-)
+from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float, bytes_to_hex
 
 
 class Flavor(StrEnum):
@@ -76,90 +70,16 @@ class HotfixParser:
 
         return dbcache  # type: ignore
 
-    def format_hotfix_data(self, entry: DBCacheEntry, filter: Optional[str]) -> Optional[str]:
-        tbl_hash = convert_table_hash(entry.table_hash)
-        tbl_name = self.manifest.get_table_name_from_hash(tbl_hash)
-
-        if filter and tbl_name.lower() != filter.lower():
+    def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
+        if len(hotfix_data) == 0:
             return None
 
-        formatted = f"""
-PushID: {entry.push_id}
-    Region: {Region(entry.region_id).name}
-    Unique ID: {entry.unique_id}
-    Table Hash: {tbl_hash}
-    Table Name: {tbl_name}
-    Status: {entry.status}"""
-
-        if entry.status == RecordState.Valid.name:
-            defs = self.dbdefs.get_parsed_definitions_by_hash(tbl_hash)
-            def_entries = defs.get_definitions_for_build(self.current_version)
-
-            if len(def_entries) == 0:
-                tbl_layout_hash = self.dbdefs.get_layout_for_table(tbl_name, self.current_version)
-                if not tbl_layout_hash:
-                    return None
-
-                def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
-
-            hotfix_data = list(entry.data)
-            parsed_data = {}
-            for def_entry in def_entries:
-                if "noninline,id" in def_entry.annotation:
-                    continue
-
-                chunk_name = def_entry.column
-                chunk_width = int(def_entry.int_width / 8)  # each number in the hotfix data is 8 bytes
-
-                column = defs.get_column_from_def_entry(def_entry)
-                if column is None:
-                    continue
-
-                chunk_type = column.type
-                chunk_data = hotfix_data[:chunk_width]
-                match chunk_type:
-                    case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
-                        chunk = bytes_to_int(chunk_data, def_entry.is_unsigned)
-                    case ColumnDataType.Float:
-                        chunk = bytes_to_float(chunk_data)
-                    case ColumnDataType.String | ColumnDataType.Locstring:
-                        chunk = bytes_to_str(chunk_data)
-                    case _:
-                        raise Exception("no data type?")
-
-                parsed_data[chunk_name] = chunk
-
-                hotfix_data = hotfix_data[chunk_width:]
-
-            formatted += f"\n\tRecord ID: {entry.record_id}"
-
-            for name, value in parsed_data.items():
-                formatted += f"\n\t\t{name}: {value}"
-
-        return formatted
-
-    def print_hotfixes(self, filter: Optional[str] = None):
-        dbcache = self.read_dbcache()
-
-        header_magic = dec_to_ascii(dbcache.header.magic)
-        print(f"DBCache Version: {dbcache.header.version} | Build: {dbcache.header.build_id}")
-        print(f"Header Magic: {header_magic}")
-        for entry in dbcache.entries:
-            if entry.push_id != -1:  # ignore those pesky cached entries
-                formatted_hotfix = self.format_hotfix_data(entry, filter)
-                if formatted_hotfix is not None:
-                    print(formatted_hotfix)
-
-    def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
         defs = self.dbdefs.get_parsed_definitions_by_hash(table_hash)
-        def_entries = defs.get_definitions_for_build(self.current_version)
+        tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name, self.current_version)
+        if not tbl_layout_hash:
+            return None
 
-        if len(def_entries) == 0:
-            tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name, self.current_version)
-            if not tbl_layout_hash:
-                return None
-
-            def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
+        def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
 
         data = list(hotfix_data)
         parsed_data = {}
@@ -168,27 +88,43 @@ PushID: {entry.push_id}
                 continue
 
             chunk_name = def_entry.column
-            chunk_width = int(def_entry.int_width / 8)  # each number in the hotfix data is 8 bytes
+            chunk_width = int(def_entry.int_width / 8)
 
             column = defs.get_column_from_def_entry(def_entry)
             if column is None:
                 continue
 
             chunk_type = column.type
-            chunk_data = data[:chunk_width]
-            match chunk_type:
-                case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
-                    chunk = bytes_to_int(chunk_data, def_entry.is_unsigned)
-                case ColumnDataType.Float:
-                    chunk = bytes_to_float(chunk_data)
-                case ColumnDataType.String | ColumnDataType.Locstring:
-                    chunk = bytes_to_str(chunk_data)
-                case _:
-                    raise Exception("no data type?")
+
+            if chunk_type == ColumnDataType.String or chunk_type == ColumnDataType.Locstring:
+                try:
+                    null_index = data.index(0)
+                    chunk_width = null_index
+                except ValueError:
+                    pass
+
+            def convert_chunk(chunk_data):
+                match chunk_type:
+                    case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
+                        return bytes_to_int(chunk_data, def_entry.is_unsigned)
+                    case ColumnDataType.Float:
+                        return bytes_to_float(chunk_data)
+                    case ColumnDataType.String | ColumnDataType.Locstring:
+                        return bytes_to_str(chunk_data)
+                    case _:
+                        raise Exception("no data type?")
+
+            if def_entry.array_size == 0:
+                chunk = convert_chunk(data[:chunk_width])
+                data = data[chunk_width:]
+            else:
+                chunk = []
+                for _ in range(def_entry.array_size):
+                    chunk_data = data[:chunk_width]
+                    chunk.append(convert_chunk(chunk_data))
+                    data = data[chunk_width:]
 
             parsed_data[chunk_name] = chunk
-
-            data = data[chunk_width:]
 
         return parsed_data
 
@@ -223,7 +159,7 @@ PushID: {entry.push_id}
             )
             all_hotfixes.append(hotfix)
 
-        max_threads = 1
+        max_threads = os.cpu_count()
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
             futures = [executor.submit(handle_hotfix, entry) for entry in dbcache.entries]
             concurrent.futures.wait(futures)
