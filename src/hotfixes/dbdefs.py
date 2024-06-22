@@ -152,13 +152,23 @@ class DBD:
 
 
 class DBDefs:
-    def __init__(self, client: Optional[httpx.Client] = None):
+    def __init__(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
         if client is not None:
             self.__client = client
         else:
             self.__client = httpx.Client(http2=True)
 
         self.__client.base_url = DBD_URL
+
+        if dbdefs_path is not None and os.path.exists(dbdefs_path):
+            self.__dbdefs_path = dbdefs_path
+
+            definitions_dir = os.path.join(self.__dbdefs_path, "definitions")
+            for file in os.listdir(definitions_dir):
+                if file.endswith(".dbd"):
+                    tbl_name = file.replace(".dbd", "")
+                    with open(os.path.join(definitions_dir, file), "r") as f:
+                        DBD_CACHE[tbl_name] = f.read()
 
     def parse_column_line(self, column: str):
         elements = column.split(" ")
@@ -313,19 +323,29 @@ class MissingManifestException(Exception): ...
 
 class Manifest(Singleton):
     __name_lookup: dict[str, str] = {}
-    __manifest = None
+    __manifest: Optional[dict] = None
+    __client: httpx.Client
 
-    def __init__(self):
-        self.load_manifest()
+    def __init__(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+        if client is not None:
+            self.__client = client
+        else:
+            self.__client = httpx.Client()
 
-    def load_manifest(self):
+        self.load_manifest(dbdefs_path)
+
+    def load_manifest(self, dbdefs_path: Optional[str] = None):
         if self.__manifest is not None:
             return
 
-        manifest_url = DBD_URL + "/manifest.json"
-        response = httpx.get(manifest_url)
-        response.raise_for_status()
-        manifest = response.json()
+        if dbdefs_path is not None:
+            with open(os.path.join(dbdefs_path, "manifest.json"), "r") as f:
+                manifest = json.load(f)
+        else:
+            manifest_url = DBD_URL + "/manifest.json"
+            response = self.__client.get(manifest_url)
+            response.raise_for_status()
+            manifest = response.json()
 
         for tbl in manifest:
             self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]

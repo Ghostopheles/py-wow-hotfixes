@@ -1,4 +1,5 @@
 import os
+import httpx
 
 from enum import StrEnum
 from dataclasses import dataclass
@@ -54,9 +55,9 @@ class HotfixCollection:
 class HotfixParser:
     current_version: Build
 
-    def __init__(self, game_path: str, flavor: Flavor, dbcache_schema: Any):
-        self.dbdefs = DBDefs()
-        self.manifest = Manifest()
+    def __init__(self, game_path: str, flavor: Flavor, dbcache_schema: Any, http_client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+        self.dbdefs = DBDefs(http_client, dbdefs_path)
+        self.manifest = Manifest(http_client)
 
         self.game_path = game_path
         self.flavor = flavor
