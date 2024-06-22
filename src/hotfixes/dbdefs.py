@@ -8,7 +8,6 @@ from enum import StrEnum
 from typing import Optional
 from dataclasses import dataclass
 
-from hotfixes import CACHE_PATH
 from hotfixes.structures import DBStructures
 from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
 
@@ -268,8 +267,10 @@ class DBDefs:
 
     def get_definitions_for_table(self, tbl_name: str) -> str:
         if tbl_name in DBD_CACHE:
+            print(f"Serving cached defs for {tbl_name}")
             return DBD_CACHE[tbl_name]
 
+        print(f"Requesting defs for {tbl_name}")
         url = f"/definitions/{tbl_name}.dbd"
         response = self.__client.get(url)
         response.raise_for_status()
@@ -311,13 +312,16 @@ class MissingManifestException(Exception): ...
 
 
 class Manifest(Singleton):
-    __name_lookup: dict[str, str]
+    __name_lookup: dict[str, str] = {}
+    __manifest = None
 
     def __init__(self):
-        self.__name_lookup = {}
         self.load_manifest()
 
     def load_manifest(self):
+        if self.__manifest is not None:
+            return
+
         manifest_url = DBD_URL + "/manifest.json"
         response = httpx.get(manifest_url)
         response.raise_for_status()
@@ -325,6 +329,8 @@ class Manifest(Singleton):
 
         for tbl in manifest:
             self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]
+
+        self.__manifest = manifest
 
     def get_table_name_from_hash(self, tbl_hash: str) -> str:
         tbl_hash = tbl_hash.upper()
