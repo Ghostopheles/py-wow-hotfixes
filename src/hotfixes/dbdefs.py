@@ -14,8 +14,8 @@ from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
 
 DB2_EXPORT_PATH = "T:/Data/dbcs/"
 
-DBD_PATH = os.path.join(CACHE_PATH, "WoWDBDefs-master")
-DBD_URL = "https://github.com/wowdev/WoWDBDefs/archive/refs/heads/master.zip"
+DBD_URL = "https://raw.githubusercontent.com/wowdev/WoWDBDefs/master"
+DBD_CACHE = {}
 
 LAYOUT_HEADER_PATTERN = r"^LAYOUT\s+(.+)(?:,\s*(.+))*"
 LAYOUT_BUILD_PATTERN = r"BUILD\s+(\d+(\.\d+)+\-\d+(\.\d+)+)*"  # ty Cloudy
@@ -153,34 +153,13 @@ class DBD:
 
 
 class DBDefs:
-    def __init__(self):
-        self.update_definitions()
+    def __init__(self, client: Optional[httpx.Client] = None):
+        if client is not None:
+            self.__client = client
+        else:
+            self.__client = httpx.Client(http2=True)
 
-    def should_update_definitions(self) -> bool:
-        if not os.path.exists(DBD_PATH):
-            return True
-
-        return False
-
-    def update_definitions(self):
-        if not self.should_update_definitions():
-            return
-
-        if not os.path.exists(DBD_PATH):
-            os.makedirs(DBD_PATH, exist_ok=True)
-
-        response = httpx.get(DBD_URL, follow_redirects=True)
-        response.raise_for_status()
-
-        with open("dbd.zip", "wb") as f:
-            for chunk in response.iter_bytes():
-                f.write(chunk)
-
-        file = zipfile.ZipFile("dbd.zip", "r")
-        file.extractall(CACHE_PATH)
-        file.close()
-
-        os.remove("dbd.zip")
+        self.__client.base_url = DBD_URL
 
     def parse_column_line(self, column: str):
         elements = column.split(" ")
@@ -287,11 +266,16 @@ class DBDefs:
 
         return DBD(columns, definitions)
 
-    def get_definitions_for_table(self, tbl_name: str):
-        path = os.path.join(DBD_PATH, "definitions", f"{tbl_name}.dbd")
-        with open(path) as f:
-            definitions = f.read()
+    def get_definitions_for_table(self, tbl_name: str) -> str:
+        if tbl_name in DBD_CACHE:
+            return DBD_CACHE[tbl_name]
 
+        url = f"/definitions/{tbl_name}.dbd"
+        response = self.__client.get(url)
+        response.raise_for_status()
+
+        definitions = response.text
+        DBD_CACHE[tbl_name] = definitions
         return definitions
 
     def get_definitions_for_table_by_hash(self, tbl_hash: str):
@@ -334,14 +318,10 @@ class Manifest(Singleton):
         self.load_manifest()
 
     def load_manifest(self):
-        manifest = None
-        manifest_path = os.path.join(DBD_PATH, "manifest.json")
-
-        with open(manifest_path, "r") as f:
-            manifest = json.load(f)
-
-        if manifest is None:
-            raise MissingManifestException("Manifest could not be found at dbdefs path")
+        manifest_url = DBD_URL + "/manifest.json"
+        response = httpx.get(manifest_url)
+        response.raise_for_status()
+        manifest = response.json()
 
         for tbl in manifest:
             self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]
