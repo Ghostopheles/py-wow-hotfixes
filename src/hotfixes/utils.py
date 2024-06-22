@@ -65,8 +65,8 @@ def bytes_to_float(data: list[int]):
 def bytes_to_str(data: list[int]):
     hex_bytes = bytes_to_hex(data)
 
-    return bytes.fromhex(hex_bytes).decode(encoding="ascii")
+    return bytes.fromhex(hex_bytes).decode(encoding="utf8")
 
 
 def str_to_bytes(input: str) -> list[int]:
-    return list(input.encode("ascii"))
+    return list(input.encode("utf8"))
