@@ -57,7 +57,7 @@ class HotfixParser:
 
     def __init__(self, game_path: str, flavor: Flavor, dbcache_schema: Any, http_client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
         self.dbdefs = DBDefs(http_client, dbdefs_path)
-        self.manifest = Manifest(http_client)
+        self.manifest = Manifest(http_client, dbdefs_path)
 
         self.game_path = game_path
         self.flavor = flavor

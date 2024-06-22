@@ -2,7 +2,6 @@ import os
 import re
 import json
 import httpx
-import zipfile
 
 from enum import StrEnum
 from typing import Optional
@@ -158,7 +157,7 @@ class DBDefs:
         else:
             self.__client = httpx.Client(http2=True)
 
-        self.__client.base_url = DBD_URL
+        self.__client.base_url = httpx.URL(DBD_URL)
 
         if dbdefs_path is not None and os.path.exists(dbdefs_path):
             self.__dbdefs_path = dbdefs_path
@@ -318,23 +317,14 @@ class DBDefs:
 UNK_TBL = "Unknown"
 
 
-class MissingManifestException(Exception): ...
-
-
 class Manifest(Singleton):
     __name_lookup: dict[str, str] = {}
-    __manifest: Optional[dict] = None
-    __client: httpx.Client
+    __manifest: Optional[dict[str, str]] = None
 
     def __init__(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
-        if client is not None:
-            self.__client = client
-        else:
-            self.__client = httpx.Client()
+        self.load_manifest(client, dbdefs_path)
 
-        self.load_manifest(dbdefs_path)
-
-    def load_manifest(self, dbdefs_path: Optional[str] = None):
+    def load_manifest(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
         if self.__manifest is not None:
             return
 
@@ -343,7 +333,8 @@ class Manifest(Singleton):
                 manifest = json.load(f)
         else:
             manifest_url = DBD_URL + "/manifest.json"
-            response = self.__client.get(manifest_url)
+            _client = client if client is not None else httpx.Client()
+            response = _client.get(manifest_url)
             response.raise_for_status()
             manifest = response.json()
 
