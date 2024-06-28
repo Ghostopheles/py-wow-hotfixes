@@ -51,9 +51,7 @@ def bytes_to_hex(data: list[int]) -> str:
 
 
 def bytes_to_int(data: list[int], is_unsigned: bool = True):
-    hex_bytes = bytes_to_hex(data)
-
-    return int.from_bytes(bytes.fromhex(hex_bytes), byteorder="little", signed=not is_unsigned)
+    return int.from_bytes(bytes(data), byteorder="little", signed=not is_unsigned)
 
 
 def bytes_to_float(data: list[int]):

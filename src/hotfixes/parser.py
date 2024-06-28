@@ -10,7 +10,7 @@ from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
 from hotfixes.structures import RecordState
 from hotfixes.t_structs import DBCacheFile, DBCacheEntry
 from hotfixes.bytelist import ByteList
-from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float
+from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float, bytes_to_hex
 
 
 class Flavor(StrEnum):
@@ -50,7 +50,15 @@ class HotfixCollection:
 class HotfixParser:
     current_version: Build
 
-    def __init__(self, game_path: str, flavor: Flavor, dbcache_schema: Any, http_client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+    def __init__(
+        self,
+        game_path: str,
+        flavor: Flavor,
+        dbcache_schema: Any,
+        http_client: Optional[httpx.Client] = None,
+        dbdefs_path: Optional[str] = None,
+        max_threads: Optional[int] = None,
+    ):
         self.dbdefs = DBDefs(http_client, dbdefs_path)
         self.manifest = Manifest(http_client, dbdefs_path)
 
@@ -64,6 +72,8 @@ class HotfixParser:
 
         self.cache_game_versions()
 
+        self.max_threads = max_threads or os.cpu_count()
+
     def read_dbcache(self) -> DBCacheFile:
         with open(self.dbcache_path, "rb") as f:
             dbcache = self.struct_dbcache_file.parse(f.read())
@@ -72,7 +82,7 @@ class HotfixParser:
 
     def convert_chunk(self, data: list[int], type: ColumnDataType, is_unsigned: bool):
         match type:
-            case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16:
+            case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16 | ColumnDataType.U32:
                 return bytes_to_int(data, is_unsigned)
             case ColumnDataType.Float:
                 return bytes_to_float(data)
@@ -80,6 +90,10 @@ class HotfixParser:
                 return bytes_to_str(data)
             case _:
                 raise Exception("no data type?")
+
+    def convert_to_hex_repr(self, hex_data: int) -> str:
+        data = bytes_to_hex([hex_data])
+        return f"0x{data}"
 
     def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
         if len(hotfix_data) == 0:
@@ -95,10 +109,10 @@ class HotfixParser:
         data = list(hotfix_data)
         parsed_data = {}
         for def_entry in def_entries:
-            if "noninline,id" in def_entry.annotation:
+            chunk_name = def_entry.column
+            if "noninline" in def_entry.annotation:
                 continue
 
-            chunk_name = def_entry.column
             chunk_width = int(def_entry.int_width / 8)
 
             column = defs.get_column_from_def_entry(def_entry)
@@ -106,23 +120,27 @@ class HotfixParser:
                 continue
 
             chunk_type = column.type
-
             if chunk_type == ColumnDataType.String or chunk_type == ColumnDataType.Locstring:
                 try:
                     null_index = data.index(0)
-                    chunk_width = null_index
+                    chunk_width = null_index + 1  # add one to hold the null character
                 except ValueError:
                     pass
 
             if def_entry.array_size == 0:
-                chunk = self.convert_chunk(data[:chunk_width], chunk_type, def_entry.is_unsigned)
+                chunk_data = data[:chunk_width]
+                chunk = self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned)
                 data = data[chunk_width:]
             else:
                 chunk = []
                 for _ in range(def_entry.array_size):
                     chunk_data = data[:chunk_width]
-                    chunk.append(self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned))
+                    value = self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned)
+                    chunk.append(value)  # type: ignore
                     data = data[chunk_width:]
+
+            if isinstance(chunk, str):
+                chunk = chunk[:-1]
 
             parsed_data[chunk_name] = chunk
 
@@ -159,7 +177,7 @@ class HotfixParser:
             )
             all_hotfixes.append(hotfix)
 
-        max_threads = os.cpu_count()
+        max_threads = self.max_threads
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
             futures = [executor.submit(handle_hotfix, entry) for entry in dbcache.entries]
             concurrent.futures.wait(futures)
