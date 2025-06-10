@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Optional
 from dataclasses import dataclass
 
-from pycasclib.core import CascLibException
+from pycasclib.core import CascLibException, FileOpenFlags
 
 from hotfixes.structures import DBStructures
 from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
@@ -326,13 +326,12 @@ class DBDefs:
 
     def get_layout_for_table(self, tbl_name: str) -> Optional[str]:
         db2_fdid = Manifest().get_fdid_from_table_name(tbl_name)
-        db2 = self.__casc.read_file_by_id(db2_fdid)  # type: ignore
-
-        try:
-            db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(db2.data)
-            return convert_table_hash(db2_header.layout_hash)  # type: ignore
-        except CascLibException as exc:
-            print(exc)
+        flags = (
+            FileOpenFlags.CASC_OPEN_BY_FILEID | FileOpenFlags.CASC_OVERCOME_ENCRYPTED
+        )
+        db2 = self.__casc.read_file_by_id(db2_fdid, flags)  # type: ignore
+        db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(db2.data)
+        return convert_table_hash(db2_header.layout_hash)  # type: ignore
 
 
 UNK_TBL = "Unknown"
