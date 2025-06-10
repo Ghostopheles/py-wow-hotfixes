@@ -120,13 +120,11 @@ class HotfixParser:
         self, table_hash: str, table_name: str, hotfix_data: ByteList
     ) -> Optional[dict[str, Any]]:
         if len(hotfix_data) == 0:
-            print("NO HOTFIX DATA " + table_name)
             return None
 
         defs = self.dbdefs.get_parsed_definitions_by_hash(table_hash)
         tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name)
         if not tbl_layout_hash:
-            print("NO TABLE LAYOUT FOR " + table_name)
             return None
 
         def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
@@ -213,17 +211,13 @@ class HotfixParser:
             )
             all_hotfixes.append(hotfix)
 
-        results = []
-        for entry in dbcache.entries:
-            results.append(handle_hotfix(entry))
+        max_threads = self.max_threads
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            futures = [
+                executor.submit(handle_hotfix, entry) for entry in dbcache.entries
+            ]
 
-        # max_threads = self.max_threads
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-        #    futures = [
-        #        executor.submit(handle_hotfix, entry) for entry in dbcache.entries
-        #    ]
-
-        # results = concurrent.futures.wait(futures)
+        results = concurrent.futures.wait(futures)
         for result in results:
             if isinstance(result, Exception):
                 print(str(result))

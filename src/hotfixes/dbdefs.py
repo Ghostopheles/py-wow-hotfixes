@@ -329,9 +329,12 @@ class DBDefs:
         flags = (
             FileOpenFlags.CASC_OPEN_BY_FILEID | FileOpenFlags.CASC_OVERCOME_ENCRYPTED
         )
-        db2 = self.__casc.read_file_by_id(db2_fdid, flags)  # type: ignore
-        db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(db2.data)
-        return convert_table_hash(db2_header.layout_hash)  # type: ignore
+        try:
+            db2 = self.__casc.read_file_by_id(db2_fdid, flags)  # type: ignore
+            db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(db2.data)
+            return convert_table_hash(db2_header.layout_hash)  # type: ignore
+        except CascLibException:
+            return None
 
 
 UNK_TBL = "Unknown"
