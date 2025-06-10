@@ -7,6 +7,8 @@ from enum import StrEnum
 from typing import Optional
 from dataclasses import dataclass
 
+from pycasclib.core import CascLibException
+
 from hotfixes.structures import DBStructures
 from hotfixes.utils import Singleton, flatten_matches, convert_table_hash
 
@@ -68,13 +70,28 @@ class Build:
     def is_equal(self, other):
         if other is None:
             return False
-        return self.major == other.major and self.minor == other.minor and self.patch == other.patch and self.build == other.build
+        return (
+            self.major == other.major
+            and self.minor == other.minor
+            and self.patch == other.patch
+            and self.build == other.build
+        )
 
     def __lt__(self, other):
-        return self.major < other.major or self.minor < other.minor or self.patch < other.patch or self.build < other.build
+        return (
+            self.major < other.major
+            or self.minor < other.minor
+            or self.patch < other.patch
+            or self.build < other.build
+        )
 
     def __gt__(self, other):
-        return self.major > other.major or self.minor > other.minor or self.patch > other.patch or self.build > other.build
+        return (
+            self.major > other.major
+            or self.minor > other.minor
+            or self.patch > other.patch
+            or self.build > other.build
+        )
 
 
 @dataclass
@@ -153,7 +170,12 @@ class DBD:
 
 
 class DBDefs:
-    def __init__(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+    def __init__(
+        self,
+        client: Optional[httpx.Client] = None,
+        dbdefs_path: Optional[str] = None,
+        casc_handle=None,
+    ):
         if client is not None:
             self.__client = client
         else:
@@ -170,6 +192,8 @@ class DBDefs:
                     tbl_name = file.replace(".dbd", "")
                     with open(os.path.join(definitions_dir, file), "r") as f:
                         DBD_CACHE[tbl_name] = f.read()
+
+        self.__casc = casc_handle
 
     def parse_column_line(self, column: str):
         elements = column.split(" ")
@@ -300,35 +324,33 @@ class DBDefs:
         defs = self.get_definitions_for_table_by_hash(tbl_hash)
         return self.parse_dbd(defs)
 
-    def get_layout_for_table(self, tbl_name: str, build: Build) -> Optional[str]:
-        db2_path = os.path.join(
-            DB2_EXPORT_PATH,
-            build.to_string(),
-            "dbfilesclient",
-            f"{tbl_name.lower()}.db2",
-        )
+    def get_layout_for_table(self, tbl_name: str) -> Optional[str]:
+        db2_fdid = Manifest().get_fdid_from_table_name(tbl_name)
+        db2 = self.__casc.read_file_by_id(db2_fdid)  # type: ignore
 
-        if not os.path.exists(db2_path):
-            print(f"Exported DB2 not found > DB2: {tbl_name} Build: {build.to_string()}")
-            return None
-
-        with open(db2_path, "rb") as f:
-            db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(f.read())
-
-        return convert_table_hash(db2_header.layout_hash)  # type: ignore
+        try:
+            db2_header = DBStructures.DB2[5].STRUCT_DB2_HEADER.parse(db2.data)
+            return convert_table_hash(db2_header.layout_hash)  # type: ignore
+        except CascLibException as exc:
+            print(exc)
 
 
 UNK_TBL = "Unknown"
 
 
 class Manifest(Singleton):
-    __name_lookup: dict[str, str] = {}
+    __hash_name_lookup: dict[str, str] = {}
+    __name_hash_lookup: dict[str, str] = {}
     __manifest: Optional[dict[str, str]] = None
 
-    def __init__(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+    def __init__(
+        self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None
+    ):
         self.load_manifest(client, dbdefs_path)
 
-    def load_manifest(self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None):
+    def load_manifest(
+        self, client: Optional[httpx.Client] = None, dbdefs_path: Optional[str] = None
+    ):
         if self.__manifest is not None:
             return
 
@@ -343,14 +365,21 @@ class Manifest(Singleton):
             manifest = response.json()
 
         for tbl in manifest:
-            self.__name_lookup[tbl["tableHash"]] = tbl["tableName"]
+            self.__hash_name_lookup[tbl["tableHash"]] = tbl["tableName"]
+            self.__name_hash_lookup[tbl["tableName"]] = tbl["tableHash"]
 
         self.__manifest = manifest
 
     def get_table_name_from_hash(self, tbl_hash: str) -> str:
         tbl_hash = tbl_hash.upper()
 
-        if tbl_hash in self.__name_lookup:
-            return self.__name_lookup[tbl_hash]
+        if tbl_hash in self.__hash_name_lookup:
+            return self.__hash_name_lookup[tbl_hash]
         else:
             return UNK_TBL  # TODO: probably also send an alert somewhere idk
+
+    def get_fdid_from_table_name(self, tbl_name: str) -> int:
+        for tbl in self.__manifest:
+            if tbl["tableName"].lower() == tbl_name.lower():
+                return tbl["db2FileDataID"]
+        return 0

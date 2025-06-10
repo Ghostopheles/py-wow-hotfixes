@@ -6,11 +6,20 @@ from enum import StrEnum
 from dataclasses import dataclass
 from typing import Optional, Any
 
+from pycasclib.core import CascHandler, LocaleFlags
+
 from hotfixes.dbdefs import DBDefs, Manifest, Build, ColumnDataType
 from hotfixes.structures import RecordState
 from hotfixes.t_structs import DBCacheFile, DBCacheEntry
 from hotfixes.bytelist import ByteList
-from hotfixes.utils import convert_table_hash, bytes_to_int, dec_to_ascii, bytes_to_str, bytes_to_float, bytes_to_hex
+from hotfixes.utils import (
+    convert_table_hash,
+    bytes_to_int,
+    dec_to_ascii,
+    bytes_to_str,
+    bytes_to_float,
+    bytes_to_hex,
+)
 
 
 class Flavor(StrEnum):
@@ -59,13 +68,17 @@ class HotfixParser:
         dbdefs_path: Optional[str] = None,
         max_threads: Optional[int] = None,
     ):
-        self.dbdefs = DBDefs(http_client, dbdefs_path)
-        self.manifest = Manifest(http_client, dbdefs_path)
-
         self.game_path = game_path
         self.flavor = flavor
 
-        self.dbcache_path = os.path.join(game_path, flavor, "Cache", "ADB", "enUS", "DBCache.bin")
+        self.casc = CascHandler(game_path, LocaleFlags.CASC_LOCALE_ENUS, product=BRANCH_NAMES[self.flavor])  # type: ignore
+
+        self.dbdefs = DBDefs(http_client, dbdefs_path, self.casc)
+        self.manifest = Manifest(http_client, dbdefs_path)
+
+        self.dbcache_path = os.path.join(
+            game_path, flavor, "Cache", "ADB", "enUS", "DBCache.bin"
+        )
         self.buildinfo_path = os.path.join(game_path, ".build.info")
 
         self.struct_dbcache_file = dbcache_schema.STRUCT_DBCACHE_FILE
@@ -73,6 +86,9 @@ class HotfixParser:
         self.cache_game_versions()
 
         self.max_threads = max_threads or os.cpu_count()
+
+    def __del__(self):
+        self.casc.close()
 
     def read_dbcache(self) -> DBCacheFile:
         with open(self.dbcache_path, "rb") as f:
@@ -82,7 +98,12 @@ class HotfixParser:
 
     def convert_chunk(self, data: list[int], type: ColumnDataType, is_unsigned: bool):
         match type:
-            case ColumnDataType.Integer | ColumnDataType.U8 | ColumnDataType.U16 | ColumnDataType.U32:
+            case (
+                ColumnDataType.Integer
+                | ColumnDataType.U8
+                | ColumnDataType.U16
+                | ColumnDataType.U32
+            ):
                 return bytes_to_int(data, is_unsigned)
             case ColumnDataType.Float:
                 return bytes_to_float(data)
@@ -95,13 +116,17 @@ class HotfixParser:
         data = bytes_to_hex([hex_data])
         return f"0x{data}"
 
-    def parse_hotfix_data(self, table_hash: str, table_name: str, hotfix_data: ByteList) -> Optional[dict[str, Any]]:
+    def parse_hotfix_data(
+        self, table_hash: str, table_name: str, hotfix_data: ByteList
+    ) -> Optional[dict[str, Any]]:
         if len(hotfix_data) == 0:
+            print("NO HOTFIX DATA " + table_name)
             return None
 
         defs = self.dbdefs.get_parsed_definitions_by_hash(table_hash)
-        tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name, self.current_version)
+        tbl_layout_hash = self.dbdefs.get_layout_for_table(table_name)
         if not tbl_layout_hash:
+            print("NO TABLE LAYOUT FOR " + table_name)
             return None
 
         def_entries = defs.get_definitions_for_layout(tbl_layout_hash)
@@ -120,7 +145,10 @@ class HotfixParser:
                 continue
 
             chunk_type = column.type
-            if chunk_type == ColumnDataType.String or chunk_type == ColumnDataType.Locstring:
+            if (
+                chunk_type == ColumnDataType.String
+                or chunk_type == ColumnDataType.Locstring
+            ):
                 try:
                     null_index = data.index(0)
                     chunk_width = null_index + 1  # add one to hold the null character
@@ -129,13 +157,17 @@ class HotfixParser:
 
             if def_entry.array_size == 0:
                 chunk_data = data[:chunk_width]
-                chunk = self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned)
+                chunk = self.convert_chunk(
+                    chunk_data, chunk_type, def_entry.is_unsigned
+                )
                 data = data[chunk_width:]
             else:
                 chunk = []
                 for _ in range(def_entry.array_size):
                     chunk_data = data[:chunk_width]
-                    value = self.convert_chunk(chunk_data, chunk_type, def_entry.is_unsigned)
+                    value = self.convert_chunk(
+                        chunk_data, chunk_type, def_entry.is_unsigned
+                    )
                     chunk.append(value)  # type: ignore
                     data = data[chunk_width:]
 
@@ -146,7 +178,9 @@ class HotfixParser:
 
         return parsed_data
 
-    def get_hotfixes(self, filter: Optional[str] = None, show_cached_entries: Optional[bool] = False) -> HotfixCollection:
+    def get_hotfixes(
+        self, filter: Optional[str] = None, show_cached_entries: Optional[bool] = False
+    ) -> HotfixCollection:
         dbcache = self.read_dbcache()
         header_magic = dec_to_ascii(dbcache.header.magic)
         dbcache_version = dbcache.header.version
@@ -165,6 +199,8 @@ class HotfixParser:
                 return
 
             hotfix_data = self.parse_hotfix_data(tbl_hash, tbl_name, entry.data)
+            if entry.status == RecordState.Valid:
+                print(hotfix_data)
 
             hotfix = Hotfix(
                 entry.push_id,
@@ -177,10 +213,20 @@ class HotfixParser:
             )
             all_hotfixes.append(hotfix)
 
-        max_threads = self.max_threads
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            futures = [executor.submit(handle_hotfix, entry) for entry in dbcache.entries]
-            concurrent.futures.wait(futures)
+        results = []
+        for entry in dbcache.entries:
+            results.append(handle_hotfix(entry))
+
+        # max_threads = self.max_threads
+        # with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+        #    futures = [
+        #        executor.submit(handle_hotfix, entry) for entry in dbcache.entries
+        #    ]
+
+        # results = concurrent.futures.wait(futures)
+        for result in results:
+            if isinstance(result, Exception):
+                print(str(result))
 
         return HotfixCollection(dbcache_version, header_magic, all_hotfixes, build_id)
 
@@ -214,7 +260,9 @@ class HotfixParser:
 
         buildinfo = self.read_build_info()
         for entry in buildinfo:
-            self.__game_versions[entry["Product"]] = Build.from_version_str(entry["Version"])
+            self.__game_versions[entry["Product"]] = Build.from_version_str(
+                entry["Version"]
+            )
 
         current_branch = BRANCH_NAMES[self.flavor]
         self.current_version = self.__game_versions[current_branch]
