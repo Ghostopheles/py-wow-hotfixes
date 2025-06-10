@@ -9,3 +9,4 @@ _main.py
 .vscode
 .coverage
 .pytest_cache
+test.json
